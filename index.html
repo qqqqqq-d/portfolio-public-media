@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>原图交付线路对照</title>
+<style>body{max-width:900px;margin:40px auto;padding:20px;color:#171717;background:#fafafa;font:17px/1.6 system-ui}button{font:inherit;padding:12px 20px;margin:8px 12px 16px 0;cursor:pointer}textarea{display:block;box-sizing:border-box;width:100%;height:55vh;padding:16px;font:13px/1.5 monospace;border:1px solid #aaa;border-radius:6px;background:white}small{color:#555}</style></head>
+<body><h1>原图交付线路对照</h1><p>逐项读取同一份原图，区分等待响应和下载耗时。图片保持原字节，页面只加载当前测试文件。</p><p>请在电脑 Chrome 中保持本页前台，点击一次开始，约需一分钟。</p><button id="start">开始线路对照</button><button id="copy" disabled>复制结果</button><p id="status">等待开始</p><textarea id="result" readonly aria-label="线路对照结果"></textarea><small>结果仅显示在本页，不自动上传浏览器信息。</small>
+<script>
+(()=>{
+ const relay='https://portfolio-original-delivery-20261030.239909754.workers.dev';
+ const originalHash='6d9122838d53cbb82cc9558d5c2ea247d420e83d41c28deac2ad3e5ce983ec1b';
+ const tests=[
+  ['Pages 小图','https://zhangqinkang.pages.dev/marquee/panda-home-astronaut.webp',14932,'5b5caaf16af8438785856262dae8b392c0066796a80f902ece3bc9a4f340347d'],
+  ['Worker 固定响应',relay+'/__probe/ping',2,null],
+  ['Pages 原图','https://zhangqinkang.pages.dev/opt-images/788e12fa865fc726bdf5.webp',805500,originalHash],
+  ['GitHub Pages 同一原图',new URL('./probe/original.webp',location.href).href,805500,originalHash],
+  ['Worker 直接交付同一原图',relay+'/__probe/original.webp',805500,originalHash]
+ ];
+ const start=document.getElementById('start'),copy=document.getElementById('copy'),result=document.getElementById('result'),status=document.getElementById('status');let report;
+ const display=()=>{result.value=JSON.stringify(report,null,2)};
+ copy.onclick=async()=>{try{await navigator.clipboard.writeText(result.value);status.textContent='已复制，可回到聊天粘贴'}catch{result.focus();result.select();document.execCommand('copy');status.textContent='已选中结果，可复制后回到聊天粘贴'}};
+ start.onclick=async()=>{
+  start.disabled=true;copy.disabled=true;performance.clearResourceTimings();
+  report={userAgent:navigator.userAgent,viewport:[innerWidth,innerHeight,devicePixelRatio],startedAt:new Date().toISOString(),startedHidden:document.hidden,serviceWorkerControlled:!!navigator.serviceWorker?.controller,visibility:[],tests:[]};
+  const visibility=()=>report.visibility.push({at:Math.round(performance.now()),hidden:document.hidden});addEventListener('visibilitychange',visibility);
+  for(const [name,url,expectedBytes,expectedHash]of tests){
+   status.textContent='正在检查：'+name;const began=performance.now(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+   try{
+    const response=await fetch(url,{cache:'no-store',credentials:'omit',signal:controller.signal}),headersAt=performance.now(),bytes=await response.arrayBuffer(),ended=performance.now();
+    const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
+    const entry=performance.getEntriesByName(url).at(-1);
+    report.tests.push({name,status:response.status,bytes:bytes.byteLength,exactOriginal:bytes.byteLength===expectedBytes&&(!expectedHash||hash===expectedHash),waitMs:Math.round(headersAt-began),downloadMs:Math.round(ended-headersAt),totalMs:Math.round(ended-began),protocol:entry?.nextHopProtocol||null,hidden:document.hidden});
+   }catch(error){report.tests.push({name,error:String(error),elapsedMs:Math.round(performance.now()-began),hidden:document.hidden})}
+   finally{clearTimeout(timer)}display();
+  }
+  removeEventListener('visibilitychange',visibility);report.finishedAt=new Date().toISOString();display();status.textContent='对照已完成，请复制结果';copy.disabled=false;start.disabled=false;
+ };
+})();
+</script></body></html>
