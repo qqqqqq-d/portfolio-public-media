@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>原图交付线路对照</title>
 <style>body{max-width:900px;margin:40px auto;padding:20px;color:#171717;background:#fafafa;font:17px/1.6 system-ui}button{font:inherit;padding:12px 20px;margin:8px 12px 16px 0;cursor:pointer}textarea{display:block;box-sizing:border-box;width:100%;height:55vh;padding:16px;font:13px/1.5 monospace;border:1px solid #aaa;border-radius:6px;background:white}small{color:#555}</style></head>
-<body><h1>原图交付线路对照</h1><p>逐项读取同一份原图，区分等待响应和下载耗时。图片保持原字节，页面只加载当前测试文件。</p><p>请在电脑 Chrome 中保持本页前台，点击一次开始，约需一分钟。</p><button id="start">开始线路对照</button><button id="copy" disabled>复制结果</button><p id="status">等待开始</p><textarea id="result" readonly aria-label="线路对照结果"></textarea><small>结果仅显示在本页，不自动上传浏览器信息。</small>
+<body><h1>原图交付线路对照</h1><p>逐项读取同一份原图，区分等待响应和下载耗时。图片保持原字节，页面只加载当前测试文件。</p><p>请在电脑 Chrome 中保持本页前台，点击一次开始，约需一分钟。</p><button id="start">开始线路对照</button><button id="parallel">开始六请求并发对照</button><button id="copy" disabled>复制结果</button><p id="status">等待开始</p><textarea id="result" readonly aria-label="线路对照结果"></textarea><small>结果仅显示在本页，不自动上传浏览器信息。</small>
 <script>
 (()=>{
  const relay='https://portfolio-original-delivery-20261030.239909754.workers.dev';
@@ -33,4 +33,17 @@
   removeEventListener('visibilitychange',visibility);report.finishedAt=new Date().toISOString();display();status.textContent='对照已完成，请复制结果';copy.disabled=false;start.disabled=false;
  };
 })();
-</script></body></html>
+</script>
+<script>
+document.getElementById('parallel').onclick=async()=>{
+const start=document.getElementById('parallel'),status=document.getElementById('status'),output=document.getElementById('result');start.disabled=true;
+const report={userAgent:navigator.userAgent,startedAt:new Date().toISOString(),hidden:document.hidden,concurrency:6,phases:[]};
+for(const [name,url]of [['Pages','https://zhangqinkang.pages.dev/opt-images/788e12fa865fc726bdf5.webp'],['GitHub Pages',new URL('./probe/original.webp',location.href).href]]){
+ status.textContent='正在并发检查：'+name;const began=performance.now();
+ const rows=await Promise.all(Array.from({length:6},async(_,i)=>{const t=performance.now();try{const r=await fetch(url+'?parallel='+Date.now()+'-'+i,{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(20000)}),h=performance.now(),b=await r.arrayBuffer(),end=performance.now();const sha=[...new Uint8Array(await crypto.subtle.digest('SHA-256',b))].map(x=>x.toString(16).padStart(2,'0')).join('');return {status:r.status,bytes:b.byteLength,exactOriginal:sha==='6d9122838d53cbb82cc9558d5c2ea247d420e83d41c28deac2ad3e5ce983ec1b',waitMs:Math.round(h-t),totalMs:Math.round(end-t),hidden:document.hidden}}catch(e){return {error:String(e),elapsedMs:Math.round(performance.now()-t),hidden:document.hidden}}}));
+ report.phases.push({name,totalMs:Math.round(performance.now()-began),rows});output.value=JSON.stringify(report,null,2);
+}
+report.finishedAt=new Date().toISOString();output.value=JSON.stringify(report,null,2);status.textContent='并发对照完成';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([output.value],{type:'application/json'}));a.download='portfolio-concurrent-transport-20261031.json';a.click();start.disabled=false;
+};
+</script>
+</body></html>
